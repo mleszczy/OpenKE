@@ -1,14 +1,14 @@
 import config
 from  models import *
 import json
-import os 
+import os
 os.environ['CUDA_VISIBLE_DEVICES']='0'
 con = config.Config()
 con.set_use_gpu(True)
 con.set_in_path("./benchmarks/FB15K/")
 con.set_work_threads(8)
-con.set_train_times(1000)
-con.set_nbatches(100)	
+con.set_train_times(1)
+con.set_nbatches(100)
 con.set_alpha(0.001)
 con.set_bern(0)
 con.set_dimension(100)
@@ -22,7 +22,7 @@ con.set_early_stopping_patience(10)
 con.set_checkpoint_dir("./checkpoint")
 con.set_result_dir("./result")
 con.set_test_link(True)
-con.set_test_triple(True)
+con.set_test_triple(False)
 con.init()
 con.set_train_model(TransE)
 con.train()

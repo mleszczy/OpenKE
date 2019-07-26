@@ -68,7 +68,8 @@ class Config(object):
         ]
         self.lib.testHead.argtypes = [
             ctypes.c_void_p,
-            ctypes.c_bool
+            ctypes.c_bool,
+            ctypes.c_char_p
         ]
         self.lib.testTail.argtypes = [
             ctypes.c_void_p,
@@ -481,6 +482,24 @@ class Config(object):
         logger.info("Finish test")
         return best_model
 
+    def prepare_output_files(self):
+        # only write results when using test_data
+        result_file_head = f"{self.result_dir}/test_head_results.txt"
+        result_file_tail = f"{self.result_dir}/test_tail_results.txt"
+
+        # write headers (and removes existing files)
+        file1 = open(result_file_head, 'w')
+        file1.write('id,dist,rank,top10\n')
+        file1.close()
+        file1 = open(result_file_tail, 'w')
+        file1.write('id,dist,rank,top10\n')
+        file1.close()
+
+        # prepare files for c code
+        result_file_head = ctypes.c_char_p(result_file_head.encode('utf-8'))
+        result_file_tail = ctypes.c_char_p(result_file_tail.encode('utf-8'))
+        return result_file_head, result_file_tail
+
     def link_prediction(self, model, test_data=False):
         if test_data:
             logger.info("Using test data")
@@ -495,6 +514,8 @@ class Config(object):
             batch_h = self.test_h
             batch_t = self.test_t
             batch_r = self.test_r
+            result_file_head, result_file_tail = self.prepare_output_files()
+
         else:
             dataTotal = self.validTotal
             h_addr = self.valid_h_addr
@@ -503,6 +524,8 @@ class Config(object):
             batch_h = self.valid_h
             batch_t = self.valid_t
             batch_r = self.valid_r
+            result_file_head = None
+            result_file_tail = None
         # validation
         logger.info(f"{dataTotal} triples total")
         for i in range(dataTotal):
@@ -512,12 +535,12 @@ class Config(object):
             res = self.test_one_step(
                 model, batch_h, batch_t, batch_r
             )
-            self.lib.testHead(res.__array_interface__["data"][0], test_data)
+            self.lib.testHead(res.__array_interface__["data"][0], test_data, result_file_head)
             self.lib.getTailBatch(h_addr, t_addr, r_addr, test_data)
             res = self.test_one_step(
                 model, batch_h, batch_t, batch_r
             )
-            self.lib.testTail(res.__array_interface__["data"][0], test_data)
+            self.lib.testTail(res.__array_interface__["data"][0], test_data, result_file_tail)
         return self.lib.test_link_prediction(dataTotal)
 
     def triple_classification(self):
