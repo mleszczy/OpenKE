@@ -2,7 +2,7 @@ import config
 from  models import *
 import json
 import os 
-os.environ['CUDA_VISIBLE_DEVICES']='5'
+os.environ['CUDA_VISIBLE_DEVICES']='0'
 con = config.Config()
 con.set_use_gpu(True)
 con.set_in_path("./benchmarks/FB15K/")

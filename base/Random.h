@@ -6,7 +6,8 @@
 unsigned long long *next_random;
 
 extern "C"
-void randReset() {
+void randReset(int seed) {
+	srand(seed);
 	next_random = (unsigned long long *)calloc(workThreads, sizeof(unsigned long long));
 	for (INT i = 0; i < workThreads; i++)
 		next_random[i] = rand();

@@ -41,7 +41,7 @@ extern "C"
 INT getValidTotal();
 
 extern "C"
-void randReset();
+void randReset(int seed);
 
 extern "C"
 void importTrainFiles();

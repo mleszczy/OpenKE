@@ -11,6 +11,9 @@ import ctypes
 import json
 import numpy as np
 import copy
+import logging 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 def to_var(x, use_gpu):
     if use_gpu:
@@ -110,7 +113,7 @@ class Config(object):
         self.lr_decay = 0
         self.weight_decay = 0
         self.lmbda = 0.0
-        self.alpah = 0.001
+        self.alpha = 0.001
         self.early_stopping_patience = 10
         self.nbatches = 100
         self.p_norm = 1
@@ -121,6 +124,7 @@ class Config(object):
         self.testModel = None
         self.pretrain_model = None
         self.use_gpu = True
+        self.seed = 1234 
 
     def init(self):
         self.lib.setInPath(
@@ -128,7 +132,7 @@ class Config(object):
         )
         self.lib.setBern(self.bern)
         self.lib.setWorkThreads(self.work_threads)
-        self.lib.randReset()
+        self.lib.randReset(self.seed)
         self.lib.importTrainFiles()
         self.lib.importTestFiles()
         self.lib.importTypeFiles()
@@ -193,6 +197,32 @@ class Config(object):
         self.relThresh = np.zeros(self.relTotal, dtype=np.float32)
         self.relThresh_addr = self.relThresh.__array_interface__["data"][0]
 
+        # make deterministic  
+        torch.manual_seed(self.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(self.seed)
+            torch.backends.cudnn.deterministic=True
+
+        # set up logging
+        if not os.path.isdir(self.result_dir):
+            os.makedirs(self.result_dir)
+        fh = logging.FileHandler(f'{self.result_dir}/training.log')
+        formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(formatter)
+        logger.addHandler(fh)
+
+        logger.info("Parameter Settings")
+        logger.info(f' - p_norm: "{self.p_norm}"')
+        logger.info(f' - mini_batch_size: "{self.nbatches}"')
+        logger.info(f' - patience: "{self.early_stopping_patience}"')
+        logger.info(f' - max_epochs: "{self.train_times}"')
+        logger.info(f' - dim: "{self.hidden_size}"')
+        logger.info(f' - lr: "{self.alpha}"')
+        logger.info(f' - seed: "{self.seed}"')
+        logger.info(f' - margin: "{self.margin}"')
+
     def set_use_gpu(self, use_gpu):
         self.use_gpu = use_gpu
 
@@ -255,6 +285,9 @@ class Config(object):
     def set_rel_dimension(self, dim):
         self.rel_size = dim
 
+    def set_seed(self, seed):
+        self.seed = seed 
+
     def set_train_times(self, train_times):
         self.train_times = train_times
 
@@ -293,7 +326,7 @@ class Config(object):
         f.close()
 
     def set_train_model(self, model):
-        print("Initializing training model...")
+        logger.info("Initializing training model...")
         self.model = model
         self.trainModel = self.model(config=self)
         if self.use_gpu:
@@ -325,10 +358,10 @@ class Config(object):
                 lr=self.alpha,
                 weight_decay=self.weight_decay,
             )
-        print("Finish initializing")
+        logger.info("Finish initializing")
 
     def set_test_model(self, model, path=None):
-        print("Initializing test model...")
+        logger.info("Initializing test model...")
         self.model = model
         self.testModel = self.model(config=self)
         if path == None:
@@ -337,7 +370,7 @@ class Config(object):
         if self.use_gpu:
             self.testModel.cuda()
         self.testModel.eval()
-        print("Finish initializing")
+        logger.info("Finish initializing")
 
     def sampling(self):
         self.lib.sampling(
@@ -398,7 +431,7 @@ class Config(object):
 
     def train(self):
         if not os.path.exists(self.checkpoint_dir):
-            os.mkdir(self.checkpoint_dir)
+            os.makedirs(self.checkpoint_dir)
         best_epoch = 0
         best_hit10 = 0.0
         best_model = None
@@ -409,47 +442,47 @@ class Config(object):
                 self.sampling()
                 loss = self.train_one_step()
                 res += loss
-            print("Epoch %d | loss: %f" % (epoch, res))
+            logger.info("Epoch %d | loss: %f" % (epoch, res))
             if (epoch + 1) % self.save_steps == 0:
-                print("Epoch %d has finished, saving..." % (epoch))
+                logger.info("Epoch %d has finished, saving..." % (epoch))
                 self.save_checkpoint(self.trainModel.state_dict(), epoch)
             if (epoch + 1) % self.valid_steps == 0:
-                print("Epoch %d has finished, validating..." % (epoch))
+                logger.info("Epoch %d has finished, validating..." % (epoch))
                 hit10 = self.valid(self.trainModel)
                 if hit10 > best_hit10:
                     best_hit10 = hit10
                     best_epoch = epoch
                     best_model = copy.deepcopy(self.trainModel.state_dict())
-                    print("Best model | hit@10 of valid set is %f" % (best_hit10))
+                    logger.info("Best model | hit@10 of valid set is %f" % (best_hit10))
                     bad_counts = 0
                 else:
-                    print(
+                    logger.info(
                         "Hit@10 of valid set is %f | bad count is %d"
                         % (hit10, bad_counts)
                     )
                     bad_counts += 1
                 if bad_counts == self.early_stopping_patience:
-                    print("Early stopping at epoch %d" % (epoch))
+                    logger.info("Early stopping at epoch %d" % (epoch))
                     break
         if best_model == None:
             best_model = self.trainModel.state_dict()
             best_epoch = self.train_times - 1
             best_hit10 = self.valid(self.trainModel)
-        print("Best epoch is %d | hit@10 of valid set is %f" % (best_epoch, best_hit10))
-        print("Store checkpoint of best result at epoch %d..." % (best_epoch))
+        logger.info("Best epoch is %d | hit@10 of valid set is %f" % (best_epoch, best_hit10))
+        logger.info("Store checkpoint of best result at epoch %d..." % (best_epoch))
         if not os.path.isdir(self.result_dir):
-            os.mkdir(self.result_dir)
+            os.makedirs(self.result_dir)
         self.save_best_checkpoint(best_model)
         self.save_embedding_matrix(best_model)
-        print("Finish storing")
-        print("Testing...")
+        logger.info("Finish storing")
+        logger.info("Testing...")
         self.set_test_model(self.model)
         self.test()
-        print("Finish test")
+        logger.info("Finish test")
         return best_model
 
     def link_prediction(self):
-        print("The total of test triple is %d" % (self.testTotal))
+        logger.info("The total of test triple is %d" % (self.testTotal))
         for i in range(self.testTotal):
             sys.stdout.write("%d\r" % (i))
             sys.stdout.flush()
