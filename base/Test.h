@@ -25,28 +25,34 @@ void initTest() {
     l3_filter_tot_constrain = 0, l3_tot_constrain = 0, r3_tot_constrain = 0, r3_filter_tot_constrain = 0, l_filter_tot_constrain = 0, r_filter_tot_constrain = 0, r_filter_rank_constrain = 0, r_rank_constrain = 0, r_filter_reci_rank_constrain = 0, r_reci_rank_constrain = 0;
 }
 extern "C"
-void getHeadBatch(INT *ph, INT *pt, INT *pr) {
+void getHeadBatch(INT *ph, INT *pt, INT *pr, bool test) {
+    Triple* dataList; 
+    dataList = test ? testList : validList;  
     for (INT i = 0; i < entityTotal; i++) {
         ph[i] = i;
-        pt[i] = testList[lastHead].t;
-        pr[i] = testList[lastHead].r;
+        pt[i] = dataList[lastHead].t;
+        pr[i] = dataList[lastHead].r;
     }
 }
 
 extern "C"
-void getTailBatch(INT *ph, INT *pt, INT *pr) {
+void getTailBatch(INT *ph, INT *pt, INT *pr, bool test) {
+    Triple* dataList; 
+    dataList = test ? testList : validList; 
     for (INT i = 0; i < entityTotal; i++) {
-        ph[i] = testList[lastTail].h;
+        ph[i] = dataList[lastTail].h;
         pt[i] = i;
-        pr[i] = testList[lastTail].r;
+        pr[i] = dataList[lastTail].r;
     }
 }
 
 extern "C"
-void testHead(REAL *con) {
-    INT h = testList[lastHead].h;
-    INT t = testList[lastHead].t;
-    INT r = testList[lastHead].r;
+void testHead(REAL *con, bool test) {
+    Triple* dataList; 
+    dataList = test ? testList : validList;
+    INT h = dataList[lastHead].h;
+    INT t = dataList[lastHead].t;
+    INT r = dataList[lastHead].r;
     INT lef = head_lef[r], rig = head_rig[r];
 
     REAL minimal = con[h];
@@ -106,10 +112,12 @@ void testHead(REAL *con) {
 }
 
 extern "C"
-void testTail(REAL *con) {
-    INT h = testList[lastTail].h;
-    INT t = testList[lastTail].t;
-    INT r = testList[lastTail].r;
+void testTail(REAL *con, bool test) {
+    Triple* dataList; 
+    dataList = test ? testList : validList;
+    INT h = dataList[lastTail].h;
+    INT t = dataList[lastTail].t;
+    INT r = dataList[lastTail].r;
     INT lef = tail_lef[r], rig = tail_rig[r];
     REAL minimal = con[t];
     INT r_s = 0;
@@ -167,33 +175,33 @@ void testTail(REAL *con) {
 }
 
 extern "C"
-void test_link_prediction() {
-    l_rank /= testTotal;
-    r_rank /= testTotal;
-    l_reci_rank /= testTotal;
-    r_reci_rank /= testTotal;
+void test_link_prediction(INT totalCount) {
+    l_rank /= totalCount;
+    r_rank /= totalCount;
+    l_reci_rank /= totalCount;
+    r_reci_rank /= totalCount;
  
-    l_tot /= testTotal;
-    l3_tot /= testTotal;
-    l1_tot /= testTotal;
+    l_tot /= totalCount;
+    l3_tot /= totalCount;
+    l1_tot /= totalCount;
  
-    r_tot /= testTotal;
-    r3_tot /= testTotal;
-    r1_tot /= testTotal;
+    r_tot /= totalCount;
+    r3_tot /= totalCount;
+    r1_tot /= totalCount;
 
     // with filter
-    l_filter_rank /= testTotal;
-    r_filter_rank /= testTotal;
-    l_filter_reci_rank /= testTotal;
-    r_filter_reci_rank /= testTotal;
+    l_filter_rank /= totalCount;
+    r_filter_rank /= totalCount;
+    l_filter_reci_rank /= totalCount;
+    r_filter_reci_rank /= totalCount;
  
-    l_filter_tot /= testTotal;
-    l3_filter_tot /= testTotal;
-    l1_filter_tot /= testTotal;
+    l_filter_tot /= totalCount;
+    l3_filter_tot /= totalCount;
+    l1_filter_tot /= totalCount;
  
-    r_filter_tot /= testTotal;
-    r3_filter_tot /= testTotal;
-    r1_filter_tot /= testTotal;
+    r_filter_tot /= totalCount;
+    r3_filter_tot /= totalCount;
+    r1_filter_tot /= totalCount;
 
     printf("no type constraint results:\n");
     
@@ -209,32 +217,32 @@ void test_link_prediction() {
             (l_filter_reci_rank+r_filter_reci_rank)/2, (l_filter_rank+r_filter_rank)/2, (l_filter_tot+r_filter_tot)/2, (l3_filter_tot+r3_filter_tot)/2, (l1_filter_tot+r1_filter_tot)/2);
 
     //type constrain
-    l_rank_constrain /= testTotal;
-    r_rank_constrain /= testTotal;
-    l_reci_rank_constrain /= testTotal;
-    r_reci_rank_constrain /= testTotal;
+    l_rank_constrain /= totalCount;
+    r_rank_constrain /= totalCount;
+    l_reci_rank_constrain /= totalCount;
+    r_reci_rank_constrain /= totalCount;
  
-    l_tot_constrain /= testTotal;
-    l3_tot_constrain /= testTotal;
-    l1_tot_constrain /= testTotal;
+    l_tot_constrain /= totalCount;
+    l3_tot_constrain /= totalCount;
+    l1_tot_constrain /= totalCount;
  
-    r_tot_constrain /= testTotal;
-    r3_tot_constrain /= testTotal;
-    r1_tot_constrain /= testTotal;
+    r_tot_constrain /= totalCount;
+    r3_tot_constrain /= totalCount;
+    r1_tot_constrain /= totalCount;
 
     // with filter
-    l_filter_rank_constrain /= testTotal;
-    r_filter_rank_constrain /= testTotal;
-    l_filter_reci_rank_constrain /= testTotal;
-    r_filter_reci_rank_constrain /= testTotal;
+    l_filter_rank_constrain /= totalCount;
+    r_filter_rank_constrain /= totalCount;
+    l_filter_reci_rank_constrain /= totalCount;
+    r_filter_reci_rank_constrain /= totalCount;
  
-    l_filter_tot_constrain /= testTotal;
-    l3_filter_tot_constrain /= testTotal;
-    l1_filter_tot_constrain /= testTotal;
+    l_filter_tot_constrain /= totalCount;
+    l3_filter_tot_constrain /= totalCount;
+    l1_filter_tot_constrain /= totalCount;
  
-    r_filter_tot_constrain /= testTotal;
-    r3_filter_tot_constrain /= testTotal;
-    r1_filter_tot_constrain /= testTotal;
+    r_filter_tot_constrain /= totalCount;
+    r3_filter_tot_constrain /= totalCount;
+    r1_filter_tot_constrain /= totalCount;
 
     printf("type constraint results:\n");
     
