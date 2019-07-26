@@ -12,16 +12,16 @@ import json
 import numpy as np
 import copy
 import logging
+
+logging.basicConfig(level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 def to_var(x, use_gpu):
     if use_gpu:
         return Variable(torch.from_numpy(x).cuda())
     else:
         return Variable(torch.from_numpy(x))
-
-
 
 class Config(object):
     def __init__(self):
@@ -103,6 +103,7 @@ class Config(object):
         ]
         """restype"""
         self.lib.getValidHit10.restype = ctypes.c_float
+        self.lib.test_link_prediction.restype = ctypes.c_float
         """set essential parameters"""
         self.in_path = "./"
         self.batch_size = 100
@@ -211,16 +212,6 @@ class Config(object):
         if torch.cuda.is_available():
             torch.cuda.manual_seed(self.seed)
             torch.backends.cudnn.deterministic=True
-
-        # set up logging
-        if not os.path.isdir(self.result_dir):
-            os.makedirs(self.result_dir)
-        fh = logging.FileHandler(f'{self.result_dir}/training.log')
-        formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        fh.setLevel(logging.DEBUG)
-        fh.setFormatter(formatter)
-        logger.addHandler(fh)
 
         logger.info("Parameter Settings")
         logger.info(f' - p_norm: "{self.p_norm}"')
@@ -442,7 +433,7 @@ class Config(object):
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
         best_epoch = 0
-        best_hit10 = 0.0
+        best_MR = float('Inf')
         best_model = None
         bad_counts = 0
         for epoch in range(self.train_times):
@@ -457,17 +448,17 @@ class Config(object):
                 self.save_checkpoint(self.trainModel.state_dict(), epoch)
             if (epoch + 1) % self.valid_steps == 0:
                 logger.info("Epoch %d has finished, validating..." % (epoch))
-                hit10 = self.valid(self.trainModel)
-                if hit10 > best_hit10:
-                    best_hit10 = hit10
+                valid_MR = self.link_prediction(model=self.trainModel, test_data=False)
+                if valid_MR < best_MR:
+                    best_MR = valid_MR
                     best_epoch = epoch
                     best_model = copy.deepcopy(self.trainModel.state_dict())
-                    logger.info("Best model | hit@10 of valid set is %f" % (best_hit10))
+                    logger.info("Best model | MR of valid set is %f" % (best_MR))
                     bad_counts = 0
                 else:
                     logger.info(
-                        "Hit@10 of valid set is %f | bad count is %d"
-                        % (hit10, bad_counts)
+                        "MR of valid set is %f | bad count is %d"
+                        % (valid_MR, bad_counts)
                     )
                     bad_counts += 1
                 if bad_counts == self.early_stopping_patience:
@@ -476,8 +467,8 @@ class Config(object):
         if best_model == None:
             best_model = self.trainModel.state_dict()
             best_epoch = self.train_times - 1
-            best_hit10 = self.valid(self.trainModel)
-        logger.info("Best epoch is %d | hit@10 of valid set is %f" % (best_epoch, best_hit10))
+            best_MR = self.link_prediction(model=self.trainModel, test_data=False)
+        logger.info("Best epoch is %d | MR of valid set is %f" % (best_epoch, best_MR))
         logger.info("Store checkpoint of best result at epoch %d..." % (best_epoch))
         if not os.path.isdir(self.result_dir):
             os.makedirs(self.result_dir)
@@ -490,7 +481,7 @@ class Config(object):
         logger.info("Finish test")
         return best_model
 
-    def link_prediction(self, test_data=False):
+    def link_prediction(self, model, test_data=False):
         if test_data:
             logger.info("Using test data")
         else:
@@ -519,15 +510,15 @@ class Config(object):
             sys.stdout.flush()
             self.lib.getHeadBatch(h_addr, t_addr, r_addr, test_data)
             res = self.test_one_step(
-                self.testModel, batch_h, batch_t, batch_r
+                model, batch_h, batch_t, batch_r
             )
             self.lib.testHead(res.__array_interface__["data"][0], test_data)
             self.lib.getTailBatch(h_addr, t_addr, r_addr, test_data)
             res = self.test_one_step(
-                self.testModel, batch_h, batch_t, batch_r
+                model, batch_h, batch_t, batch_r
             )
             self.lib.testTail(res.__array_interface__["data"][0], test_data)
-        self.lib.test_link_prediction(dataTotal)
+        return self.lib.test_link_prediction(dataTotal)
 
     def triple_classification(self):
         self.lib.getValidBatch(
@@ -571,10 +562,11 @@ class Config(object):
         )
 
     def test(self):
-        print(self.valid(self.testModel))
         if self.val_link:
-            self.link_prediction(test_data=False)
+            mr_rank_val = self.link_prediction(model=self.testModel, test_data=False)
+            logger.info(f'MR rank on valid set is: {mr_rank_val}')
         if self.test_link:
-            self.link_prediction(test_data=True)
+            mr_rank_test = self.link_prediction(model=self.testModel, test_data=True)
+            logger.info(f'MR rank on test set is: {mr_rank_test}')
         if self.test_triple:
             self.triple_classification()

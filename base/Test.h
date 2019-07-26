@@ -26,8 +26,8 @@ void initTest() {
 }
 extern "C"
 void getHeadBatch(INT *ph, INT *pt, INT *pr, bool test) {
-    Triple* dataList; 
-    dataList = test ? testList : validList;  
+    Triple* dataList;
+    dataList = test ? testList : validList;
     for (INT i = 0; i < entityTotal; i++) {
         ph[i] = i;
         pt[i] = dataList[lastHead].t;
@@ -37,8 +37,8 @@ void getHeadBatch(INT *ph, INT *pt, INT *pr, bool test) {
 
 extern "C"
 void getTailBatch(INT *ph, INT *pt, INT *pr, bool test) {
-    Triple* dataList; 
-    dataList = test ? testList : validList; 
+    Triple* dataList;
+    dataList = test ? testList : validList;
     for (INT i = 0; i < entityTotal; i++) {
         ph[i] = dataList[lastTail].h;
         pt[i] = i;
@@ -48,7 +48,7 @@ void getTailBatch(INT *ph, INT *pt, INT *pr, bool test) {
 
 extern "C"
 void testHead(REAL *con, bool test) {
-    Triple* dataList; 
+    Triple* dataList;
     dataList = test ? testList : validList;
     INT h = dataList[lastHead].h;
     INT t = dataList[lastHead].t;
@@ -76,7 +76,7 @@ void testHead(REAL *con, bool test) {
                     if (not _find(j, t, r)) {
                         l_filter_s_constrain += 1;
                     }
-                }  
+                }
             }
         }
     }
@@ -113,7 +113,7 @@ void testHead(REAL *con, bool test) {
 
 extern "C"
 void testTail(REAL *con, bool test) {
-    Triple* dataList; 
+    Triple* dataList;
     dataList = test ? testList : validList;
     INT h = dataList[lastTail].h;
     INT t = dataList[lastTail].t;
@@ -142,7 +142,7 @@ void testTail(REAL *con, bool test) {
                     }
             }
         }
-        
+
     }
 
     if (r_filter_s < 10) r_filter_tot += 1;
@@ -175,16 +175,16 @@ void testTail(REAL *con, bool test) {
 }
 
 extern "C"
-void test_link_prediction(INT totalCount) {
+REAL test_link_prediction(INT totalCount) {
     l_rank /= totalCount;
     r_rank /= totalCount;
     l_reci_rank /= totalCount;
     r_reci_rank /= totalCount;
- 
+
     l_tot /= totalCount;
     l3_tot /= totalCount;
     l1_tot /= totalCount;
- 
+
     r_tot /= totalCount;
     r3_tot /= totalCount;
     r1_tot /= totalCount;
@@ -194,17 +194,17 @@ void test_link_prediction(INT totalCount) {
     r_filter_rank /= totalCount;
     l_filter_reci_rank /= totalCount;
     r_filter_reci_rank /= totalCount;
- 
+
     l_filter_tot /= totalCount;
     l3_filter_tot /= totalCount;
     l1_filter_tot /= totalCount;
- 
+
     r_filter_tot /= totalCount;
     r3_filter_tot /= totalCount;
     r1_filter_tot /= totalCount;
 
     printf("no type constraint results:\n");
-    
+
     printf("metric:\t\t\t MRR \t\t MR \t\t hit@10 \t hit@3  \t hit@1 \n");
     printf("l(raw):\t\t\t %f \t %f \t %f \t %f \t %f \n", l_reci_rank, l_rank, l_tot, l3_tot, l1_tot);
     printf("r(raw):\t\t\t %f \t %f \t %f \t %f \t %f \n", r_reci_rank, r_rank, r_tot, r3_tot, r1_tot);
@@ -221,11 +221,11 @@ void test_link_prediction(INT totalCount) {
     r_rank_constrain /= totalCount;
     l_reci_rank_constrain /= totalCount;
     r_reci_rank_constrain /= totalCount;
- 
+
     l_tot_constrain /= totalCount;
     l3_tot_constrain /= totalCount;
     l1_tot_constrain /= totalCount;
- 
+
     r_tot_constrain /= totalCount;
     r3_tot_constrain /= totalCount;
     r1_tot_constrain /= totalCount;
@@ -235,17 +235,17 @@ void test_link_prediction(INT totalCount) {
     r_filter_rank_constrain /= totalCount;
     l_filter_reci_rank_constrain /= totalCount;
     r_filter_reci_rank_constrain /= totalCount;
- 
+
     l_filter_tot_constrain /= totalCount;
     l3_filter_tot_constrain /= totalCount;
     l1_filter_tot_constrain /= totalCount;
- 
+
     r_filter_tot_constrain /= totalCount;
     r3_filter_tot_constrain /= totalCount;
     r1_filter_tot_constrain /= totalCount;
 
     printf("type constraint results:\n");
-    
+
     printf("metric:\t\t\t MRR \t\t MR \t\t hit@10 \t hit@3  \t hit@1 \n");
     printf("l(raw):\t\t\t %f \t %f \t %f \t %f \t %f \n", l_reci_rank_constrain, l_rank_constrain, l_tot_constrain, l3_tot_constrain, l1_tot_constrain);
     printf("r(raw):\t\t\t %f \t %f \t %f \t %f \t %f \n", r_reci_rank_constrain, r_rank_constrain, r_tot_constrain, r3_tot_constrain, r1_tot_constrain);
@@ -256,6 +256,8 @@ void test_link_prediction(INT totalCount) {
     printf("r(filter):\t\t %f \t %f \t %f \t %f \t %f \n", r_filter_reci_rank_constrain, r_filter_rank_constrain, r_filter_tot_constrain, r3_filter_tot_constrain, r1_filter_tot_constrain);
     printf("averaged(filter):\t %f \t %f \t %f \t %f \t %f \n",
             (l_filter_reci_rank_constrain+r_filter_reci_rank_constrain)/2, (l_filter_rank_constrain+r_filter_rank_constrain)/2, (l_filter_tot_constrain+r_filter_tot_constrain)/2, (l3_filter_tot_constrain+r3_filter_tot_constrain)/2, (l1_filter_tot_constrain+r1_filter_tot_constrain)/2);
+
+    return (l_rank+r_rank)/2;
 }
 
 /*=====================================================================================
@@ -294,7 +296,7 @@ void getNegValid() {
         fprintf(fout, "%ld\t%ld\t%ld\t%ld\n", negValidList[i].h, negValidList[i].t, negValidList[i].r, INT(-1));
     }
     fclose(fout);
-    */  
+    */
 }
 
 extern "C"
@@ -378,7 +380,7 @@ void test_triple_classification(REAL *relThresh, REAL *score_pos, REAL *score_ne
             total += 2;
         }
         testAcc[r] = 1.0 * correct / total;
-        aveCorrect += correct; 
+        aveCorrect += correct;
         aveTotal += total;
     }
     aveAcc = 1.0 * aveCorrect / aveTotal;
