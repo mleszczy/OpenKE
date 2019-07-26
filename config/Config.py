@@ -11,7 +11,7 @@ import ctypes
 import json
 import numpy as np
 import copy
-import logging 
+import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -58,14 +58,22 @@ class Config(object):
             ctypes.c_void_p,
             ctypes.c_void_p,
             ctypes.c_void_p,
+            ctypes.c_bool
         ]
         self.lib.getTailBatch.argtypes = [
             ctypes.c_void_p,
             ctypes.c_void_p,
             ctypes.c_void_p,
+            ctypes.c_bool
         ]
-        self.lib.testHead.argtypes = [ctypes.c_void_p]
-        self.lib.testTail.argtypes = [ctypes.c_void_p]
+        self.lib.testHead.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_bool
+        ]
+        self.lib.testTail.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_bool
+        ]
         """test triple classification"""
         self.lib.getValidBatch.argtypes = [
             ctypes.c_void_p,
@@ -118,13 +126,14 @@ class Config(object):
         self.nbatches = 100
         self.p_norm = 1
         self.test_link = True
+        self.val_link = True
         self.test_triple = True
         self.model = None
         self.trainModel = None
         self.testModel = None
         self.pretrain_model = None
         self.use_gpu = True
-        self.seed = 1234 
+        self.seed = 1234
 
     def init(self):
         self.lib.setInPath(
@@ -197,7 +206,7 @@ class Config(object):
         self.relThresh = np.zeros(self.relTotal, dtype=np.float32)
         self.relThresh_addr = self.relThresh.__array_interface__["data"][0]
 
-        # make deterministic  
+        # make deterministic
         torch.manual_seed(self.seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed(self.seed)
@@ -217,7 +226,6 @@ class Config(object):
         logger.info(f' - p_norm: "{self.p_norm}"')
         logger.info(f' - mini_batch_size: "{self.nbatches}"')
         logger.info(f' - patience: "{self.early_stopping_patience}"')
-        logger.info(f' - max_epochs: "{self.train_times}"')
         logger.info(f' - dim: "{self.hidden_size}"')
         logger.info(f' - lr: "{self.alpha}"')
         logger.info(f' - seed: "{self.seed}"')
@@ -228,6 +236,9 @@ class Config(object):
 
     def set_test_link(self, test_link):
         self.test_link = test_link
+
+    def set_val_link(self, val_link):
+        self.val_link = val_link
 
     def set_test_triple(self, test_triple):
         self.test_triple = test_triple
@@ -286,7 +297,7 @@ class Config(object):
         self.rel_size = dim
 
     def set_seed(self, seed):
-        self.seed = seed 
+        self.seed = seed
 
     def set_train_times(self, train_times):
         self.train_times = train_times
@@ -419,9 +430,7 @@ class Config(object):
                 self.valid_h_addr, self.valid_t_addr, self.valid_r_addr
             )
             res = self.test_one_step(model, self.valid_h, self.valid_t, self.valid_r)
-
             self.lib.validHead(res.__array_interface__["data"][0])
-
             self.lib.getValidTailBatch(
                 self.valid_h_addr, self.valid_t_addr, self.valid_r_addr
             )
@@ -481,23 +490,44 @@ class Config(object):
         logger.info("Finish test")
         return best_model
 
-    def link_prediction(self):
-        logger.info("The total of test triple is %d" % (self.testTotal))
-        for i in range(self.testTotal):
+    def link_prediction(self, test_data=False):
+        if test_data:
+            logger.info("Using test data")
+        else:
+            logger.info("Using validation data")
+        self.lib.initTest()
+        if test_data:
+            dataTotal = self.testTotal
+            h_addr = self.test_h_addr
+            t_addr = self.test_t_addr
+            r_addr = self.test_r_addr
+            batch_h = self.test_h
+            batch_t = self.test_t
+            batch_r = self.test_r
+        else:
+            dataTotal = self.validTotal
+            h_addr = self.valid_h_addr
+            t_addr = self.valid_t_addr
+            r_addr = self.valid_r_addr
+            batch_h = self.valid_h
+            batch_t = self.valid_t
+            batch_r = self.valid_r
+        # validation
+        logger.info(f"{dataTotal} triples total")
+        for i in range(dataTotal):
             sys.stdout.write("%d\r" % (i))
             sys.stdout.flush()
-            self.lib.getHeadBatch(self.test_h_addr, self.test_t_addr, self.test_r_addr)
+            self.lib.getHeadBatch(h_addr, t_addr, r_addr, test_data)
             res = self.test_one_step(
-                self.testModel, self.test_h, self.test_t, self.test_r
+                self.testModel, batch_h, batch_t, batch_r
             )
-            self.lib.testHead(res.__array_interface__["data"][0])
-
-            self.lib.getTailBatch(self.test_h_addr, self.test_t_addr, self.test_r_addr)
+            self.lib.testHead(res.__array_interface__["data"][0], test_data)
+            self.lib.getTailBatch(h_addr, t_addr, r_addr, test_data)
             res = self.test_one_step(
-                self.testModel, self.test_h, self.test_t, self.test_r
+                self.testModel, batch_h, batch_t, batch_r
             )
-            self.lib.testTail(res.__array_interface__["data"][0])
-        self.lib.test_link_prediction()
+            self.lib.testTail(res.__array_interface__["data"][0], test_data)
+        self.lib.test_link_prediction(dataTotal)
 
     def triple_classification(self):
         self.lib.getValidBatch(
@@ -541,7 +571,10 @@ class Config(object):
         )
 
     def test(self):
+        print(self.valid(self.testModel))
+        if self.val_link:
+            self.link_prediction(test_data=False)
         if self.test_link:
-            self.link_prediction()
+            self.link_prediction(test_data=True)
         if self.test_triple:
             self.triple_classification()
