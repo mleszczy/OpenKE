@@ -13,6 +13,7 @@ import json
 import numpy as np
 import copy
 import logging
+import pickle
 
 logging.basicConfig(level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -382,6 +383,7 @@ class Config(object):
         if self.use_gpu:
             self.testModel.cuda()
         self.testModel.eval()
+        self.tag = os.path.basename(path).split('.ckpt')[0]
         logger.info("Finish initializing")
 
     def sampling(self):
@@ -495,24 +497,6 @@ class Config(object):
         logger.info("Finish test")
         return best_model
 
-    def prepare_output_files(self):
-        # only write results when using test_data
-        result_file_head = f"{self.result_dir}/test_head_results.txt"
-        result_file_tail = f"{self.result_dir}/test_tail_results.txt"
-
-        # write headers (and removes existing files)
-        # file1 = open(result_file_head, 'w')
-        # file1.write('id,dist,rank,top10\n')
-        # file1.close()
-        # file1 = open(result_file_tail, 'w')
-        # file1.write('id,dist,rank,top10\n')
-        # file1.close()
-
-        # prepare files for c code
-        # result_file_head = ctypes.c_char_p(result_file_head.encode('utf-8'))
-        # result_file_tail = ctypes.c_char_p(result_file_tail.encode('utf-8'))
-        return result_file_head, result_file_tail
-
     def write_rank_results(self, results, filename):
         with open(filename, 'w') as f:
             writer = csv.DictWriter(f, fieldnames = results[0].keys())
@@ -534,9 +518,8 @@ class Config(object):
             batch_h = self.test_h
             batch_t = self.test_t
             batch_r = self.test_r
-            # result_file_head, result_file_tail = self.prepare_output_files()
-            result_file_head = f"{self.result_dir}/test_head_results.txt"
-            result_file_tail = f"{self.result_dir}/test_tail_results.txt"
+            result_file_head = f"{self.result_dir}/{self.tag}_test_head_results.txt"
+            result_file_tail = f"{self.result_dir}/{self.tag}_test_tail_results.txt"
         else:
             dataTotal = self.validTotal
             h_addr = self.valid_h_addr
@@ -551,6 +534,7 @@ class Config(object):
         logger.info(f"{dataTotal} triples total")
         head_results = []
         tail_results = []
+        total_results = []
         # for i in range(5):
         for i in range(dataTotal):
             sys.stdout.write("%d\r" % (i))
@@ -559,6 +543,7 @@ class Config(object):
             res = self.test_one_step(
                 model, batch_h, batch_t, batch_r
             )
+            total_results.append(res)
             dist = ctypes.c_float(0.)
             rank = ctypes.c_float(0.)
             filter_rank = ctypes.c_float(0.)
@@ -574,6 +559,7 @@ class Config(object):
             res = self.test_one_step(
                 model, batch_h, batch_t, batch_r
             )
+            total_results.append(res)
             ent_id = self.lib.testTail(res.__array_interface__["data"][0],
                 test_data,
                 ctypes.byref(dist),
@@ -582,8 +568,10 @@ class Config(object):
             )
             tail_results.append({'id': ent_id, 'rank': rank.value, 'filter_rank': filter_rank.value,
                 'dist': dist.value, 'top10': int(rank.value < 10), 'top10_filter': int(filter_rank.value < 10)})
-        self.write_rank_results(head_results, result_file_head)
-        self.write_rank_results(tail_results, result_file_tail)
+        if test_data:
+            self.write_rank_results(head_results, result_file_head)
+            self.write_rank_results(tail_results, result_file_tail)
+            pickle.dump(total_results, open(f"{self.result_dir}/{self.tag}_dist.pkl", 'wb'))
         return self.lib.test_link_prediction(dataTotal)
 
     def triple_classification(self):
