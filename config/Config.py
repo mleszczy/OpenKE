@@ -8,6 +8,7 @@ import time
 import sys
 import datetime
 import ctypes
+import csv
 import json
 import numpy as np
 import copy
@@ -69,11 +70,16 @@ class Config(object):
         self.lib.testHead.argtypes = [
             ctypes.c_void_p,
             ctypes.c_bool,
-            ctypes.c_char_p
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_void_p
         ]
         self.lib.testTail.argtypes = [
             ctypes.c_void_p,
-            ctypes.c_bool
+            ctypes.c_bool,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_void_p
         ]
         """test triple classification"""
         self.lib.getValidBatch.argtypes = [
@@ -105,6 +111,9 @@ class Config(object):
         """restype"""
         self.lib.getValidHit10.restype = ctypes.c_float
         self.lib.test_link_prediction.restype = ctypes.c_float
+        self.lib.testHead.restype = ctypes.c_int
+        self.lib.testTail.restype = ctypes.c_int
+
         """set essential parameters"""
         self.in_path = "./"
         self.batch_size = 100
@@ -396,6 +405,10 @@ class Config(object):
         path = os.path.join(self.result_dir, self.model.__name__ + ".ckpt")
         torch.save(best_model, path)
 
+    def save_compressed_checkpoint(self, bitrate):
+        path = os.path.join(self.result_dir, self.model.__name__ + f"_br_{bitrate}.ckpt")
+        torch.save(self.testModel.state_dict(), path)
+
     def train_one_step(self):
         self.trainModel.batch_h = to_var(self.batch_h, self.use_gpu)
         self.trainModel.batch_t = to_var(self.batch_t, self.use_gpu)
@@ -488,17 +501,24 @@ class Config(object):
         result_file_tail = f"{self.result_dir}/test_tail_results.txt"
 
         # write headers (and removes existing files)
-        file1 = open(result_file_head, 'w')
-        file1.write('id,dist,rank,top10\n')
-        file1.close()
-        file1 = open(result_file_tail, 'w')
-        file1.write('id,dist,rank,top10\n')
-        file1.close()
+        # file1 = open(result_file_head, 'w')
+        # file1.write('id,dist,rank,top10\n')
+        # file1.close()
+        # file1 = open(result_file_tail, 'w')
+        # file1.write('id,dist,rank,top10\n')
+        # file1.close()
 
         # prepare files for c code
-        result_file_head = ctypes.c_char_p(result_file_head.encode('utf-8'))
-        result_file_tail = ctypes.c_char_p(result_file_tail.encode('utf-8'))
+        # result_file_head = ctypes.c_char_p(result_file_head.encode('utf-8'))
+        # result_file_tail = ctypes.c_char_p(result_file_tail.encode('utf-8'))
         return result_file_head, result_file_tail
+
+    def write_rank_results(self, results, filename):
+        with open(filename, 'w') as f:
+            writer = csv.DictWriter(f, fieldnames = results[0].keys())
+            writer.writeheader()
+            for row in results:
+                writer.writerow(row)
 
     def link_prediction(self, model, test_data=False):
         if test_data:
@@ -514,8 +534,9 @@ class Config(object):
             batch_h = self.test_h
             batch_t = self.test_t
             batch_r = self.test_r
-            result_file_head, result_file_tail = self.prepare_output_files()
-
+            # result_file_head, result_file_tail = self.prepare_output_files()
+            result_file_head = f"{self.result_dir}/test_head_results.txt"
+            result_file_tail = f"{self.result_dir}/test_tail_results.txt"
         else:
             dataTotal = self.validTotal
             h_addr = self.valid_h_addr
@@ -528,6 +549,9 @@ class Config(object):
             result_file_tail = None
         # validation
         logger.info(f"{dataTotal} triples total")
+        head_results = []
+        tail_results = []
+        # for i in range(5):
         for i in range(dataTotal):
             sys.stdout.write("%d\r" % (i))
             sys.stdout.flush()
@@ -535,12 +559,31 @@ class Config(object):
             res = self.test_one_step(
                 model, batch_h, batch_t, batch_r
             )
-            self.lib.testHead(res.__array_interface__["data"][0], test_data, result_file_head)
+            dist = ctypes.c_float(0.)
+            rank = ctypes.c_float(0.)
+            filter_rank = ctypes.c_float(0.)
+            ent_id = self.lib.testHead(res.__array_interface__["data"][0],
+                test_data,
+                ctypes.byref(dist),
+                ctypes.byref(rank),
+                ctypes.byref(filter_rank)
+            )
+            head_results.append({'id': ent_id, 'rank': rank.value, 'filter_rank': filter_rank.value,
+                'dist': dist.value, 'top10': int(rank.value < 10), 'top10_filter': int(filter_rank.value < 10)})
             self.lib.getTailBatch(h_addr, t_addr, r_addr, test_data)
             res = self.test_one_step(
                 model, batch_h, batch_t, batch_r
             )
-            self.lib.testTail(res.__array_interface__["data"][0], test_data, result_file_tail)
+            ent_id = self.lib.testTail(res.__array_interface__["data"][0],
+                test_data,
+                ctypes.byref(dist),
+                ctypes.byref(rank),
+                ctypes.byref(filter_rank)
+            )
+            tail_results.append({'id': ent_id, 'rank': rank.value, 'filter_rank': filter_rank.value,
+                'dist': dist.value, 'top10': int(rank.value < 10), 'top10_filter': int(filter_rank.value < 10)})
+        self.write_rank_results(head_results, result_file_head)
+        self.write_rank_results(tail_results, result_file_tail)
         return self.lib.test_link_prediction(dataTotal)
 
     def triple_classification(self):

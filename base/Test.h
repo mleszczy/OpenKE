@@ -47,7 +47,7 @@ void getTailBatch(INT *ph, INT *pt, INT *pr, bool test) {
 }
 
 extern "C"
-void testHead(REAL *con, bool test, char filename[]) {
+INT testHead(REAL *con, bool test, REAL* dist, REAL* rank, REAL* filter_rank) {
     Triple* dataList;
     dataList = test ? testList : validList;
     INT h = dataList[lastHead].h;
@@ -107,18 +107,14 @@ void testHead(REAL *con, bool test, char filename[]) {
 
     lastHead++;
 
-    // append to file for stability measurement if using test data
-    if (test) {
-        FILE *resultFile = fopen(filename, "a");
-        fprintf(resultFile, "%ld,%f,%ld,%d\n", h, con[h], l_s, l_s < 10);
-        fclose(resultFile);
-    }
-    //printf("l_filter_s: %ld\n", l_filter_s);
-    //printf("%f %f %f %f \n", l_tot / lastHead, l_filter_tot / lastHead, l_rank / lastHead, l_filter_rank / lastHead);
+    *dist = con[h];
+    *rank = l_s;
+    *filter_rank = l_filter_s;
+    return h;
 }
 
 extern "C"
-void testTail(REAL *con, bool test, char filename[]) {
+INT testTail(REAL *con, bool test, REAL* dist, REAL* rank, REAL* filter_rank) {
     Triple* dataList;
     dataList = test ? testList : validList;
     INT h = dataList[lastTail].h;
@@ -177,15 +173,10 @@ void testTail(REAL *con, bool test, char filename[]) {
 
     lastTail++;
 
-    // append to file for stability measurement if using test data
-    if (test) {
-        FILE *resultFile = fopen(filename, "a");
-        fprintf(resultFile, "%ld,%f,%ld,%d\n", t, con[t], r_s, r_s < 10);
-        fclose(resultFile);
-    }
-
-    //printf("r_filter_s: %ld\n", r_filter_s);
-    //printf("%f %f %f %f\n", r_tot /lastTail, r_filter_tot /lastTail, r_rank /lastTail, r_filter_rank /lastTail);
+    *dist = con[t];
+    *rank = r_s;
+    *filter_rank = r_filter_s;
+    return t;
 }
 
 extern "C"
