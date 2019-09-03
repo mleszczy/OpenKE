@@ -43,6 +43,7 @@ for emb in embs:
         for line in dat:
             if "MR rank on valid set is" in line:
                 mean_rank = float(line.split(' ')[-1])
+                print(emb, mean_rank)
                 if lr not in results:
                     results[lr] = [mean_rank]
                 else:

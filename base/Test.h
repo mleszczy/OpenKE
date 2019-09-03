@@ -370,18 +370,40 @@ void getBestThreshold(REAL *relThresh, REAL *score_pos, REAL *score_neg) {
 }
 
 REAL *testAcc;
+int *predictions;
 REAL aveAcc;
 extern "C"
-void test_triple_classification(REAL *relThresh, REAL *score_pos, REAL *score_neg) {
+void test_triple_classification(REAL *relThresh, REAL *score_pos, REAL *score_neg, char filename[]) {
     testAcc = (REAL *)calloc(relationTotal, sizeof(REAL));
+    predictions = (int *)calloc(testTotal*2, sizeof(int));
+
+    FILE *resultFile = fopen(filename, "w");
+
     INT aveCorrect = 0, aveTotal = 0;
     REAL aveAcc;
     for (INT r = 0; r < relationTotal; r++) {
-        if (validLef[r] == -1 || testLef[r] ==-1) continue;
+        if (validLef[r] == -1 || testLef[r] == -1) continue;
         INT correct = 0, total = 0;
         for (INT i = testLef[r]; i <= testRig[r]; i++) {
-            if (score_pos[i] <= relThresh[r]) correct++;
-            if (score_neg[i] > relThresh[r]) correct++;
+            // printf("thresh: %lf\n", relThresh[r]);
+            if (score_pos[i] <= relThresh[r]){
+                correct++;
+                predictions[aveTotal] = 1;
+                fprintf(resultFile, "%d\n", 1);
+            }
+            else{
+                predictions[aveTotal] = 0;
+                fprintf(resultFile, "%d\n", 0);
+            }
+            if (score_neg[i] > relThresh[r]){
+                correct++;
+                predictions[aveTotal+1] = 1;
+                fprintf(resultFile, "%d\n", 1);
+            }
+            else {
+                predictions[aveTotal+1] = 0;
+                fprintf(resultFile, "%d\n", 0);
+            }
             total += 2;
         }
         testAcc[r] = 1.0 * correct / total;
@@ -389,7 +411,15 @@ void test_triple_classification(REAL *relThresh, REAL *score_pos, REAL *score_ne
         aveTotal += total;
     }
     aveAcc = 1.0 * aveCorrect / aveTotal;
+    printf("aveTotal: %ld\n", aveTotal);
     printf("triple classification accuracy is %lf\n", aveAcc);
+    // FILE *resultFile = fopen(filename, "w");
+    // for (int i = 0; i < testTotal*2; i++){
+    //     fprintf(resultFile, "%d\n", predictions[i]);
+    // }
+    fclose(resultFile);
+    free(testAcc);
+    free(predictions);
 }
 
 #endif

@@ -43,7 +43,7 @@ seed = args.seed
 br = args.br
 
 # load model, necessary config params to set and get embeddings
-con1 = load_model('sweep_results_95')
+con1 = load_model('sweep_results_95_complete')
 ent_embs1, rel_embs1 = get_embs(con1)
 
 # compress entity and relation embeddings
@@ -55,7 +55,8 @@ compressed_rel_embs1, _, _ = compress_uniform(X=rel_embs1, bit_rate=br,
 con1.testModel.ent_embeddings.weight.data.copy_(torch.from_numpy(compressed_ent_embs1))
 con1.testModel.rel_embeddings.weight.data.copy_(torch.from_numpy(compressed_rel_embs1))
 # save new ckpt with compressed embs
-con1.save_compressed_checkpoint(br)
+path = os.path.join(con1.result_dir, con1.model.__name__ + f"_br_{br}_complete.ckpt")
+con1.save_compressed_checkpoint(br, path)
 
 # load second model and get embs
 con2 = load_model('sweep_results')
@@ -83,4 +84,5 @@ compressed_rel_embs2, _, _ = compress_uniform(X=rel_embs2, bit_rate=br, adaptive
 con2.testModel.ent_embeddings.weight.data.copy_(torch.from_numpy(compressed_ent_embs2))
 con2.testModel.rel_embeddings.weight.data.copy_(torch.from_numpy(compressed_rel_embs2))
 # save new ckpt with compressed embs
-con2.save_compressed_checkpoint(br)
+path = os.path.join(con2.result_dir, con2.model.__name__ + f"_br_{br}_complete.ckpt")
+con2.save_compressed_checkpoint(br, path)

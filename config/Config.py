@@ -108,6 +108,7 @@ class Config(object):
             ctypes.c_void_p,
             ctypes.c_void_p,
             ctypes.c_void_p,
+            ctypes.c_char_p
         ]
         """restype"""
         self.lib.getValidHit10.restype = ctypes.c_float
@@ -140,6 +141,7 @@ class Config(object):
         self.test_link = True
         self.val_link = True
         self.test_triple = True
+        self.rel_thresh_file = None
         self.model = None
         self.trainModel = None
         self.testModel = None
@@ -242,7 +244,8 @@ class Config(object):
     def set_val_link(self, val_link):
         self.val_link = val_link
 
-    def set_test_triple(self, test_triple):
+    def set_test_triple(self, test_triple, rel_thresh_file=None):
+        self.rel_thresh_file = rel_thresh_file
         self.test_triple = test_triple
 
     def set_margin(self, margin):
@@ -407,8 +410,7 @@ class Config(object):
         path = os.path.join(self.result_dir, self.model.__name__ + ".ckpt")
         torch.save(best_model, path)
 
-    def save_compressed_checkpoint(self, bitrate):
-        path = os.path.join(self.result_dir, self.model.__name__ + f"_br_{bitrate}.ckpt")
+    def save_compressed_checkpoint(self, bitrate, path):
         torch.save(self.testModel.state_dict(), path)
 
     def train_one_step(self):
@@ -534,7 +536,9 @@ class Config(object):
         logger.info(f"{dataTotal} triples total")
         head_results = []
         tail_results = []
-        total_results = []
+
+        full_head_results = np.zeros((dataTotal, self.entTotal))
+        # total_results = []
         # for i in range(5):
         for i in range(dataTotal):
             sys.stdout.write("%d\r" % (i))
@@ -543,7 +547,8 @@ class Config(object):
             res = self.test_one_step(
                 model, batch_h, batch_t, batch_r
             )
-            total_results.append(res)
+            # total_results.append(res)
+            full_head_results[i:i+1] = res
             dist = ctypes.c_float(0.)
             rank = ctypes.c_float(0.)
             filter_rank = ctypes.c_float(0.)
@@ -559,7 +564,7 @@ class Config(object):
             res = self.test_one_step(
                 model, batch_h, batch_t, batch_r
             )
-            total_results.append(res)
+            # total_results.append(res)
             ent_id = self.lib.testTail(res.__array_interface__["data"][0],
                 test_data,
                 ctypes.byref(dist),
@@ -571,29 +576,42 @@ class Config(object):
         if test_data:
             self.write_rank_results(head_results, result_file_head)
             self.write_rank_results(tail_results, result_file_tail)
-            pickle.dump(total_results, open(f"{self.result_dir}/{self.tag}_dist.pkl", 'wb'))
+            num_sample = int(0.1 * len(full_head_results))
+            np.random.seed(1234)
+            sample_idx = np.random.choice(np.arange(0,len(full_head_results)), num_sample)
+            pickle.dump(full_head_results[sample_idx], open(f"{self.result_dir}/{self.tag}_dist.pkl", 'wb'), protocol=4)
         return self.lib.test_link_prediction(dataTotal)
 
     def triple_classification(self):
-        self.lib.getValidBatch(
-            self.valid_pos_h_addr,
-            self.valid_pos_t_addr,
-            self.valid_pos_r_addr,
-            self.valid_neg_h_addr,
-            self.valid_neg_t_addr,
-            self.valid_neg_r_addr,
-        )
-        res_pos = self.test_one_step(
-            self.testModel, self.valid_pos_h, self.valid_pos_t, self.valid_pos_r
-        )
-        res_neg = self.test_one_step(
-            self.testModel, self.valid_neg_h, self.valid_neg_t, self.valid_neg_r
-        )
-        self.lib.getBestThreshold(
-            self.relThresh_addr,
-            res_pos.__array_interface__["data"][0],
-            res_neg.__array_interface__["data"][0],
-        )
+        if self.rel_thresh_file is None:
+            self.rel_thresh_file = f"{self.result_dir}/{self.tag}_relThresh.pkl"
+            self.lib.getValidBatch(
+                self.valid_pos_h_addr,
+                self.valid_pos_t_addr,
+                self.valid_pos_r_addr,
+                self.valid_neg_h_addr,
+                self.valid_neg_t_addr,
+                self.valid_neg_r_addr,
+            )
+            res_pos = self.test_one_step(
+                self.testModel, self.valid_pos_h, self.valid_pos_t, self.valid_pos_r
+            )
+            res_neg = self.test_one_step(
+                self.testModel, self.valid_neg_h, self.valid_neg_t, self.valid_neg_r
+            )
+            print(res_pos.shape, res_neg.shape)
+            self.lib.getBestThreshold(
+                self.relThresh_addr,
+                res_pos.__array_interface__["data"][0],
+                res_neg.__array_interface__["data"][0],
+            )
+            with open(self.rel_thresh_file, 'wb')  as f:
+                pickle.dump(self.relThresh, f)
+        else:
+            print(self.rel_thresh_file)
+            print(self.relThresh.__array_interface__["data"][0])
+            self.relThresh[:] = pickle.load(open(self.rel_thresh_file, 'rb'))
+            print(self.relThresh.__array_interface__["data"][0])
 
         self.lib.getTestBatch(
             self.test_pos_h_addr,
@@ -609,10 +627,14 @@ class Config(object):
         res_neg = self.test_one_step(
             self.testModel, self.test_neg_h, self.test_neg_t, self.test_neg_r
         )
+        pred_file_name = f"{self.result_dir}/{self.tag}_triple_preds.txt"
+        pred_file = ctypes.c_char_p(pred_file_name.encode('utf-8'))
+        print()
         self.lib.test_triple_classification(
             self.relThresh_addr,
             res_pos.__array_interface__["data"][0],
             res_neg.__array_interface__["data"][0],
+            pred_file
         )
 
     def test(self):

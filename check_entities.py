@@ -1,4 +1,6 @@
-with open('/dfs/scratch1/mleszczy/OpenKE_custom/benchmarks/FB15K_95/train2id.txt', 'r') as f:
+import sys
+
+with open(f'{sys.argv[1]}', 'r') as f:
 	lines = f.readlines()
 
 idx = set()
@@ -25,4 +27,6 @@ for line in lines[1:]:
 # 	idx.add(int(e1))
 # 	idx.add(int(e2))
 
+print(len(set(idx)))
+print(sys.argv[1])
 print(set(range(14951)) - idx)
